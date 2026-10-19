@@ -39,3 +39,16 @@ async fn resource_id_and_type_match_configuration() {
     assert_eq!(resource_id, RESOURCE_ID);
     assert_eq!(resource_type, ResourceType::LCCFQ);
 }
+
+#[tokio::test]
+#[ignore = "requires a running LCCFQ Backend with valid certificates"]
+async fn is_accessible_with_running_backend() {
+    let mut qrmi = LCCFQServer::new("lccfq_qpu").expect("LCCFQServer should be created");
+
+    let accessible = qrmi
+        .is_accessible()
+        .await
+        .expect("LCCFQ Ping should succeed");
+
+    assert!(accessible);
+}
