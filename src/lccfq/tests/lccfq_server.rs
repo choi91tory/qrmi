@@ -15,12 +15,13 @@ use crate::models::ResourceType;
 use crate::QuantumResource;
 
 #[tokio::test]
-async fn resource_id_and_type_match_configuration() {
+async fn resource_id_type_and_metadata_match_configuration() {
     const RESOURCE_ID: &str = "lccfq-qpu";
+    const ENDPOINT: &str = "https://localhost:50052";
 
     let mut qrmi = LCCFQServer {
         resource_id: RESOURCE_ID.to_string(),
-        endpoint: "https://localhost:50052".to_string(),
+        endpoint: ENDPOINT.to_string(),
         ca_cert_path: "unused-ca.crt".to_string(),
         client_cert_path: "unused-client.crt".to_string(),
         client_key_path: "unused-client.key".to_string(),
@@ -38,6 +39,12 @@ async fn resource_id_and_type_match_configuration() {
 
     assert_eq!(resource_id, RESOURCE_ID);
     assert_eq!(resource_type, ResourceType::LCCFQ);
+
+    let metadata = qrmi.metadata().await;
+
+    assert_eq!(metadata["resource_id"], RESOURCE_ID);
+    assert_eq!(metadata["resource_type"], "lccfq");
+    assert_eq!(metadata["backend_endpoint"], ENDPOINT);
 }
 
 #[tokio::test]

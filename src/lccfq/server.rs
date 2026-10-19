@@ -15,6 +15,7 @@ use crate::error::required_env;
 use crate::models::ResourceType;
 use crate::{QuantumResource, Result};
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 /// QRMI implementation for LCCFQ Backend.
 pub struct LCCFQServer {
@@ -56,6 +57,21 @@ impl QuantumResource for LCCFQServer {
             &self.client_key_path,
         )
         .await
+    }
+
+    async fn metadata(&mut self) -> HashMap<String, String> {
+        let mut metadata = HashMap::new();
+
+        metadata.insert("resource_id".to_string(), self.resource_id.clone());
+
+        metadata.insert(
+            "resource_type".to_string(),
+            ResourceType::LCCFQ.as_str().to_string(),
+        );
+
+        metadata.insert("backend_endpoint".to_string(), self.endpoint.clone());
+
+        metadata
     }
 }
 
