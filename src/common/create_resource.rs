@@ -14,6 +14,7 @@ use crate::Result;
 use crate::alice_bob::AliceBobFelis;
 use crate::ibm::{IBMQiskitRuntimeService, IBMQuantumComputeService, IBMQuantumSystem};
 use crate::iqm::IQMServer;
+use crate::lccfq::LCCFQServer;
 use crate::models::ResourceType;
 use crate::pasqal::{PasqalCloud, PasqalLocal};
 use crate::QuantumResource;
@@ -32,5 +33,6 @@ pub(crate) fn create_resource(
         ResourceType::PasqalLocal => Box::new(PasqalLocal::new(resource_id)?),
         ResourceType::AliceBobFelis => Box::new(AliceBobFelis::new(resource_id)?),
         ResourceType::IQMServer => Box::new(IQMServer::new(resource_id)?),
+        ResourceType::LCCFQ => Box::new(LCCFQServer::new(resource_id)?),
     })
 }

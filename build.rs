@@ -12,8 +12,21 @@
 
 use std::process::Command;
 
-// For C API bindings
 fn main() {
+    // Generate the Rust gRPC client from the LCCFQ protobuf definition.
+    let protoc_path =
+        protoc_bin_vendored::protoc_bin_path().expect("failed to find bundled protoc");
+    std::env::set_var("PROTOC", protoc_path);
+
+    tonic_prost_build::configure()
+        .build_server(false)
+        .build_client(true)
+        .compile_protos(&["proto/lccfq/qpu_service.proto"], &["proto/lccfq"])
+        .expect("failed to compile LCCFQ protobuf");
+
+    println!("cargo:rerun-if-changed=proto/lccfq/qpu_service.proto");
+
+    // For C API bindings
     for (key, value) in std::env::vars() {
         eprintln!("{key}: {value}");
     }
