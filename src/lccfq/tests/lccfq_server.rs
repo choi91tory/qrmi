@@ -11,8 +11,8 @@
 // that they have been altered from the originals.
 
 use super::LCCFQServer;
-use crate::models::ResourceType;
-use crate::QuantumResource;
+use crate::models::{Payload, ResourceType};
+use crate::{QrmiError, QuantumResource};
 
 #[tokio::test]
 async fn resource_id_type_and_metadata_match_configuration() {
@@ -45,6 +45,108 @@ async fn resource_id_type_and_metadata_match_configuration() {
     assert_eq!(metadata["resource_id"], RESOURCE_ID);
     assert_eq!(metadata["resource_type"], "lccfq");
     assert_eq!(metadata["backend_endpoint"], ENDPOINT);
+}
+
+#[tokio::test]
+async fn task_start_rejects_unknown_task_type() {
+    let mut qrmi = LCCFQServer {
+        resource_id: "lccfq-qpu".to_string(),
+        endpoint: "https://localhost:50052".to_string(),
+        ca_cert_path: "unused-ca.crt".to_string(),
+        client_cert_path: "unused-client.crt".to_string(),
+        client_key_path: "unused-client.key".to_string(),
+    };
+
+    let payload = Payload::LCCFQ {
+        input: "{}".to_string(),
+        task_type: "unknown".to_string(),
+    };
+
+    let error = qrmi
+        .task_start(payload)
+        .await
+        .expect_err("unknown task type should fail");
+
+    assert!(matches!(error, QrmiError::InvalidInput(_)));
+}
+
+#[tokio::test]
+async fn task_start_rejects_invalid_json() {
+    let mut qrmi = LCCFQServer {
+        resource_id: "lccfq-qpu".to_string(),
+        endpoint: "https://localhost:50052".to_string(),
+        ca_cert_path: "unused-ca.crt".to_string(),
+        client_cert_path: "unused-client.crt".to_string(),
+        client_key_path: "unused-client.key".to_string(),
+    };
+
+    let payload = Payload::LCCFQ {
+        input: "not valid JSON".to_string(),
+        task_type: "circuit".to_string(),
+    };
+
+    let error = qrmi
+        .task_start(payload)
+        .await
+        .expect_err("invalid JSON should fail");
+
+    assert!(matches!(error, QrmiError::InvalidJson(_)));
+}
+
+#[tokio::test]
+#[ignore = "requires a running LCCFQ Backend with valid certificates"]
+async fn submit_circuit_task_with_running_backend() {
+    let mut qrmi = LCCFQServer::new("lccfq_qpu").expect("LCCFQServer should be created");
+
+    let payload = Payload::LCCFQ {
+        input: r#"
+        {
+            "gates": [
+                {
+                    "symbol": "H",
+                    "target_qubits": [0],
+                    "control_qubits": [],
+                    "params": []
+                }
+            ],
+            "shots": 10
+        }
+        "#
+        .to_string(),
+        task_type: "circuit".to_string(),
+    };
+
+    let task_id = qrmi
+        .task_start(payload)
+        .await
+        .expect("circuit task submission should succeed");
+
+    assert!(!task_id.is_empty());
+}
+
+#[tokio::test]
+#[ignore = "requires a running LCCFQ Backend with valid certificates"]
+async fn submit_test_task_with_running_backend() {
+    let mut qrmi = LCCFQServer::new("lccfq_qpu").expect("LCCFQServer should be created");
+
+    let payload = Payload::LCCFQ {
+        input: r#"
+        {
+            "symbol": "XEB",
+            "params": [1, 2],
+            "shots": 10
+        }
+        "#
+        .to_string(),
+        task_type: "test".to_string(),
+    };
+
+    let task_id = qrmi
+        .task_start(payload)
+        .await
+        .expect("test task submission should succeed");
+
+    assert!(!task_id.is_empty());
 }
 
 #[tokio::test]

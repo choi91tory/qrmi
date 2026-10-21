@@ -40,6 +40,13 @@ pub enum Payload {
         /// Optional user-defined tag associated with the job
         tag: Option<String>,
     },
+    /// Payload for LCCFQ Backend
+    LCCFQ {
+        /// JSON-serialized circuit or test request
+        input: String,
+        /// LCCFQ task type: "circuit" or "test"
+        task_type: String,
+    },
 }
 #[cfg(feature = "pyo3")]
 define_stub_info_gatherer!(stub_info);
