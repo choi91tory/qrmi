@@ -12,7 +12,7 @@
 
 use super::client;
 use crate::error::required_env;
-use crate::models::{Payload, ResourceType};
+use crate::models::{Payload, ResourceType, TaskResult};
 use crate::{QrmiError, QuantumResource, Result};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -88,6 +88,17 @@ impl QuantumResource for LCCFQServer {
             },
             other => Err(QrmiError::UnsupportedPayload(format!("{other:?}"))),
         }
+    }
+
+    async fn task_result(&mut self, task_id: &str) -> Result<TaskResult> {
+        client::get_result(
+            task_id,
+            &self.endpoint,
+            &self.ca_cert_path,
+            &self.client_cert_path,
+            &self.client_key_path,
+        )
+        .await
     }
 
     async fn metadata(&mut self) -> HashMap<String, String> {

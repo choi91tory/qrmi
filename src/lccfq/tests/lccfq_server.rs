@@ -11,8 +11,9 @@
 // that they have been altered from the originals.
 
 use super::LCCFQServer;
-use crate::models::{Payload, ResourceType};
+use crate::models::{Payload, ResourceType, TaskResult};
 use crate::{QrmiError, QuantumResource};
+use tokio::time::{sleep, Duration};
 
 #[tokio::test]
 async fn resource_id_type_and_metadata_match_configuration() {
@@ -160,4 +161,108 @@ async fn is_accessible_with_running_backend() {
         .expect("LCCFQ Ping should succeed");
 
     assert!(accessible);
+}
+
+#[tokio::test]
+#[ignore = "requires a running LCCFQ Backend with valid certificates"]
+async fn task_result_returns_circuit_result_with_running_backend() {
+    let mut qrmi = LCCFQServer::new("lccfq_qpu").expect("LCCFQServer should be created");
+
+    let payload = Payload::LCCFQ {
+        input: r#"
+        {
+            "gates": [
+                {
+                    "symbol": "H",
+                    "target_qubits": [0],
+                    "control_qubits": [],
+                    "params": []
+                }
+            ],
+            "shots": 10
+        }
+        "#
+        .to_string(),
+        task_type: "circuit".to_string(),
+    };
+
+    let task_id = qrmi
+        .task_start(payload)
+        .await
+        .expect("circuit task submission should succeed");
+
+    let mut task_result: Option<TaskResult> = None;
+
+    for _ in 0..30 {
+        match qrmi.task_result(&task_id).await {
+            Ok(result) => {
+                task_result = Some(result);
+                break;
+            }
+            Err(QrmiError::TaskNotReady { .. }) => {
+                sleep(Duration::from_millis(500)).await;
+            }
+            Err(error) => {
+                panic!("task result retrieval failed: {error}");
+            }
+        }
+    }
+
+    let task_result = task_result.expect("task result should become available");
+
+    let result_json: serde_json::Value =
+        serde_json::from_str(&task_result.value).expect("task result should contain valid JSON");
+
+    assert_eq!(result_json["type"], "circuit");
+    assert_eq!(result_json["task_id"], task_id);
+    assert!(result_json["distribution"].is_object());
+}
+
+#[tokio::test]
+#[ignore = "requires a running LCCFQ Backend with valid certificates"]
+async fn task_result_returns_test_result_with_running_backend() {
+    let mut qrmi = LCCFQServer::new("lccfq_qpu").expect("LCCFQServer should be created");
+
+    let payload = Payload::LCCFQ {
+        input: r#"
+        {
+            "symbol": "XEB",
+            "params": [1, 2],
+            "shots": 10
+        }
+        "#
+        .to_string(),
+        task_type: "test".to_string(),
+    };
+
+    let task_id = qrmi
+        .task_start(payload)
+        .await
+        .expect("test task submission should succeed");
+
+    let mut task_result: Option<TaskResult> = None;
+
+    for _ in 0..30 {
+        match qrmi.task_result(&task_id).await {
+            Ok(result) => {
+                task_result = Some(result);
+                break;
+            }
+            Err(QrmiError::TaskNotReady { .. }) => {
+                sleep(Duration::from_millis(500)).await;
+            }
+            Err(error) => {
+                panic!("task result retrieval failed: {error}");
+            }
+        }
+    }
+
+    let task_result = task_result.expect("task result should become available");
+
+    let result_json: serde_json::Value =
+        serde_json::from_str(&task_result.value).expect("task result should contain valid JSON");
+
+    assert_eq!(result_json["type"], "test");
+    assert_eq!(result_json["task_id"], task_id);
+    assert!(result_json["parameters"].is_object());
 }

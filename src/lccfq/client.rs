@@ -16,13 +16,18 @@ pub(crate) mod proto {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
 
-use crate::Result;
+use crate::models::TaskResult;
+use crate::{QrmiError, Result};
 use serde::Deserialize;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint, Identity};
 
 use anyhow::{anyhow, Context};
+use proto::get_result_response::Result as ResultPayload;
 use proto::qpu_executor_client::QpuExecutorClient;
-use proto::{ExecutorRequest, Gate, SubmitCircuitTaskRequest, SubmitTestTaskRequest};
+use proto::{
+    ExecutorRequest, Gate, GetResultRequest, SubmitCircuitTaskRequest, SubmitTestTaskRequest,
+};
+
 #[derive(Debug, Deserialize)]
 struct CircuitTaskInput {
     gates: Vec<CircuitGateInput>,
@@ -160,4 +165,60 @@ pub(crate) async fn submit_test_task(
     }
 
     Ok(response.task_id)
+}
+
+pub(crate) async fn get_result(
+    task_id: &str,
+    endpoint: &str,
+    ca_cert_path: &str,
+    client_cert_path: &str,
+    client_key_path: &str,
+) -> Result<TaskResult> {
+    let mut client = connect(endpoint, ca_cert_path, client_cert_path, client_key_path).await?;
+
+    let response = client
+        .get_result(GetResultRequest {
+            task_id: task_id.to_string(),
+        })
+        .await
+        .context("LCCFQ GetResult request failed")?
+        .into_inner();
+
+    if !response.found {
+        return Err(QrmiError::TaskNotReady {
+            task_id: task_id.to_string(),
+            reason: response.error_message,
+        });
+    }
+
+    let result = match response.result {
+        Some(ResultPayload::CircuitResult(result)) => serde_json::json!({
+            "type": "circuit",
+            "task_id": result.task_id,
+            "distribution": result.distribution,
+        }),
+
+        Some(ResultPayload::TestResult(result)) => serde_json::json!({
+            "type": "test",
+            "task_id": result.task_id,
+            "parameters": result.parameters,
+        }),
+
+        Some(ResultPayload::ControlAck(result)) => serde_json::json!({
+            "type": "control",
+            "task_id": result.task_id,
+            "status": result.status,
+            "message": result.message,
+        }),
+
+        None => {
+            return Err(
+                anyhow!("LCCFQ GetResult response did not contain a result payload").into(),
+            );
+        }
+    };
+
+    Ok(TaskResult {
+        value: serde_json::to_string(&result)?,
+    })
 }
