@@ -16,7 +16,7 @@ pub(crate) mod proto {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
 
-use crate::models::TaskResult;
+use crate::models::{TaskResult, TaskStatus};
 use crate::{QrmiError, Result};
 use serde::Deserialize;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint, Identity};
@@ -25,7 +25,8 @@ use anyhow::{anyhow, Context};
 use proto::get_result_response::Result as ResultPayload;
 use proto::qpu_executor_client::QpuExecutorClient;
 use proto::{
-    ExecutorRequest, Gate, GetResultRequest, SubmitCircuitTaskRequest, SubmitTestTaskRequest,
+    CancelTaskRequest, ExecutorRequest, Gate, GetResultRequest, GetTaskStatusRequest,
+    SubmitCircuitTaskRequest, SubmitTestTaskRequest, TaskStatusValue,
 };
 
 #[derive(Debug, Deserialize)]
@@ -221,4 +222,68 @@ pub(crate) async fn get_result(
     Ok(TaskResult {
         value: serde_json::to_string(&result)?,
     })
+}
+
+pub(crate) async fn get_task_status(
+    task_id: &str,
+    endpoint: &str,
+    ca_cert_path: &str,
+    client_cert_path: &str,
+    client_key_path: &str,
+) -> Result<TaskStatus> {
+    let mut client = connect(endpoint, ca_cert_path, client_cert_path, client_key_path).await?;
+
+    let response = client
+        .get_task_status(GetTaskStatusRequest {
+            task_id: task_id.to_string(),
+        })
+        .await
+        .context("LCCFQ GetTaskStatus request failed")?
+        .into_inner();
+
+    if !response.found {
+        return Err(QrmiError::TaskNotFound(task_id.to_string()));
+    }
+
+    let status = TaskStatusValue::try_from(response.status)
+        .context("LCCFQ GetTaskStatus returned an unknown status value")?;
+
+    match status {
+        TaskStatusValue::TaskStatusQueued => Ok(TaskStatus::Queued),
+        TaskStatusValue::TaskStatusRunning => Ok(TaskStatus::Running),
+        TaskStatusValue::TaskStatusCompleted => Ok(TaskStatus::Completed),
+        TaskStatusValue::TaskStatusFailed => Ok(TaskStatus::Failed),
+        TaskStatusValue::TaskStatusCancelled => Ok(TaskStatus::Cancelled),
+        TaskStatusValue::TaskStatusUnspecified => {
+            Err(anyhow!("LCCFQ returned an unspecified task status").into())
+        }
+    }
+}
+
+pub(crate) async fn cancel_task(
+    task_id: &str,
+    endpoint: &str,
+    ca_cert_path: &str,
+    client_cert_path: &str,
+    client_key_path: &str,
+) -> Result<()> {
+    let mut client = connect(endpoint, ca_cert_path, client_cert_path, client_key_path).await?;
+
+    let response = client
+        .cancel_task(CancelTaskRequest {
+            task_id: task_id.to_string(),
+        })
+        .await
+        .context("LCCFQ CancelTask request failed")?
+        .into_inner();
+
+    if !response.found {
+        return Err(QrmiError::TaskNotFound(task_id.to_string()));
+    }
+
+    if !response.cancelled {
+        return Err(QrmiError::InvalidInput(response.error_message));
+    }
+
+    Ok(())
 }

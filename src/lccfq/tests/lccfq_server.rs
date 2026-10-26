@@ -11,7 +11,7 @@
 // that they have been altered from the originals.
 
 use super::LCCFQServer;
-use crate::models::{Payload, ResourceType, TaskResult};
+use crate::models::{Payload, ResourceType, TaskResult, TaskStatus};
 use crate::{QrmiError, QuantumResource};
 use tokio::time::{sleep, Duration};
 
@@ -265,4 +265,87 @@ async fn task_result_returns_test_result_with_running_backend() {
     assert_eq!(result_json["type"], "test");
     assert_eq!(result_json["task_id"], task_id);
     assert!(result_json["parameters"].is_object());
+}
+
+#[tokio::test]
+#[ignore = "requires a running LCCFQ Backend with valid certificates"]
+async fn task_status_reaches_completed_with_running_backend() {
+    let mut qrmi = LCCFQServer::new("lccfq_qpu").expect("LCCFQServer should be created");
+
+    let payload = Payload::LCCFQ {
+        input: r#"
+        {
+            "symbol": "XEB",
+            "params": [1, 2],
+            "shots": 10
+        }
+        "#
+        .to_string(),
+        task_type: "test".to_string(),
+    };
+
+    let task_id = qrmi
+        .task_start(payload)
+        .await
+        .expect("test task submission should succeed");
+
+    let mut completed = false;
+
+    for _ in 0..30 {
+        match qrmi
+            .task_status(&task_id)
+            .await
+            .expect("task status retrieval should succeed")
+        {
+            TaskStatus::Queued | TaskStatus::Running => {
+                sleep(Duration::from_millis(500)).await;
+            }
+            TaskStatus::Completed => {
+                completed = true;
+                break;
+            }
+            TaskStatus::Failed => {
+                panic!("task should not fail");
+            }
+            TaskStatus::Cancelled => {
+                panic!("task should not be cancelled");
+            }
+        }
+    }
+
+    assert!(completed, "task should reach Completed status");
+}
+
+#[tokio::test]
+#[ignore = "requires a running LCCFQ Backend with valid certificates"]
+async fn task_stop_cancels_queued_task_with_running_backend() {
+    let mut qrmi = LCCFQServer::new("lccfq_qpu").expect("LCCFQServer should be created");
+
+    let payload = Payload::LCCFQ {
+        input: r#"
+        {
+            "symbol": "XEB",
+            "params": [1, 2],
+            "shots": 10
+        }
+        "#
+        .to_string(),
+        task_type: "test".to_string(),
+    };
+
+    let task_id = qrmi
+        .task_start(payload)
+        .await
+        .expect("test task submission should succeed");
+
+    qrmi.task_stop(&task_id)
+        .await
+        .expect("queued task cancellation should succeed");
+
+    let status = qrmi
+        .task_status(&task_id)
+        .await
+        .expect("cancelled task status retrieval should succeed");
+
+    assert_eq!(status, TaskStatus::Cancelled);
 }
