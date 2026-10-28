@@ -26,7 +26,8 @@ use proto::get_result_response::Result as ResultPayload;
 use proto::qpu_executor_client::QpuExecutorClient;
 use proto::{
     CancelTaskRequest, ExecutorRequest, Gate, GetResultRequest, GetTargetRequest,
-    GetTaskStatusRequest, SubmitCircuitTaskRequest, SubmitTestTaskRequest, TaskStatusValue,
+    GetTaskLogsRequest, GetTaskStatusRequest, SubmitCircuitTaskRequest, SubmitTestTaskRequest,
+    TaskStatusValue,
 };
 
 #[derive(Debug, Deserialize)]
@@ -309,4 +310,28 @@ pub(crate) async fn get_target(
     Ok(Target {
         value: response.target_json,
     })
+}
+
+pub(crate) async fn get_task_logs(
+    task_id: &str,
+    endpoint: &str,
+    ca_cert_path: &str,
+    client_cert_path: &str,
+    client_key_path: &str,
+) -> Result<String> {
+    let mut client = connect(endpoint, ca_cert_path, client_cert_path, client_key_path).await?;
+
+    let response = client
+        .get_task_logs(GetTaskLogsRequest {
+            task_id: task_id.to_string(),
+        })
+        .await
+        .context("LCCFQ GetTaskLogs request failed")?
+        .into_inner();
+
+    if !response.found {
+        return Err(QrmiError::TaskNotFound(task_id.to_string()));
+    }
+
+    Ok(response.logs.join("\n"))
 }

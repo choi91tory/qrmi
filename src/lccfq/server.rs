@@ -123,6 +123,17 @@ impl QuantumResource for LCCFQServer {
         .await
     }
 
+    async fn task_logs(&mut self, task_id: &str) -> Result<String> {
+        client::get_task_logs(
+            task_id,
+            &self.endpoint,
+            &self.ca_cert_path,
+            &self.client_cert_path,
+            &self.client_key_path,
+        )
+        .await
+    }
+
     async fn target(&mut self) -> Result<Target> {
         client::get_target(
             &self.endpoint,
