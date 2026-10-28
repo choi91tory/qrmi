@@ -349,3 +349,24 @@ async fn task_stop_cancels_queued_task_with_running_backend() {
 
     assert_eq!(status, TaskStatus::Cancelled);
 }
+
+#[tokio::test]
+#[ignore = "requires a running LCCFQ Backend with valid certificates"]
+async fn target_returns_qpu_observables_with_running_backend() {
+    let mut qrmi = LCCFQServer::new("lccfq_qpu").expect("LCCFQServer should be created");
+
+    let target = qrmi
+        .target()
+        .await
+        .expect("LCCFQ target retrieval should succeed");
+
+    let target_json: serde_json::Value =
+        serde_json::from_str(&target.value).expect("target should contain valid JSON");
+
+    assert!(target_json["qubits"].is_object());
+    assert!(target_json["last_updated"].is_string());
+    assert!(!target_json["qubits"]
+        .as_object()
+        .expect("qubits should be a JSON object")
+        .is_empty());
+}

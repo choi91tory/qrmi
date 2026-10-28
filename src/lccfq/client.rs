@@ -16,7 +16,7 @@ pub(crate) mod proto {
     include!(concat!(env!("OUT_DIR"), "/_.rs"));
 }
 
-use crate::models::{TaskResult, TaskStatus};
+use crate::models::{Target, TaskResult, TaskStatus};
 use crate::{QrmiError, Result};
 use serde::Deserialize;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint, Identity};
@@ -25,8 +25,8 @@ use anyhow::{anyhow, Context};
 use proto::get_result_response::Result as ResultPayload;
 use proto::qpu_executor_client::QpuExecutorClient;
 use proto::{
-    CancelTaskRequest, ExecutorRequest, Gate, GetResultRequest, GetTaskStatusRequest,
-    SubmitCircuitTaskRequest, SubmitTestTaskRequest, TaskStatusValue,
+    CancelTaskRequest, ExecutorRequest, Gate, GetResultRequest, GetTargetRequest,
+    GetTaskStatusRequest, SubmitCircuitTaskRequest, SubmitTestTaskRequest, TaskStatusValue,
 };
 
 #[derive(Debug, Deserialize)]
@@ -286,4 +286,27 @@ pub(crate) async fn cancel_task(
     }
 
     Ok(())
+}
+
+pub(crate) async fn get_target(
+    endpoint: &str,
+    ca_cert_path: &str,
+    client_cert_path: &str,
+    client_key_path: &str,
+) -> Result<Target> {
+    let mut client = connect(endpoint, ca_cert_path, client_cert_path, client_key_path).await?;
+
+    let response = client
+        .get_target(GetTargetRequest {})
+        .await
+        .context("LCCFQ GetTarget request failed")?
+        .into_inner();
+
+    if !response.success {
+        return Err(anyhow!("LCCFQ target retrieval failed: {}", response.error_message).into());
+    }
+
+    Ok(Target {
+        value: response.target_json,
+    })
 }
